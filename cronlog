@@ -1,0 +1,100 @@
+#! /usr/bin/perl
+
+use strict;
+use warnings;
+
+use File::Temp qw(tempfile);
+use Getopt::Long;
+use Pod::Usage;
+
+my ($logfile, $opt_help);
+GetOptions(
+    'logfile=s' => \$logfile,
+    'help'      => \$opt_help,
+) or pod2usage(1);
+pod2usage(0)
+    if $opt_help;
+die "no args"
+    unless @ARGV;
+
+# open logfile
+my $logfh;
+if ($logfile) {
+    open $logfh, '>>', $logfile
+        or die "failed to open file:$logfile:$!";
+} else {
+    ($logfh, $logfile) = tempfile();
+}
+autoflush $logfh 1;
+print $logfh '-'x78, "\n";
+my $logpos = tell $logfh;
+die "failed to obtain position of logfile:$!"
+    if $logpos == -1;
+
+# exec
+print $logfh '[', scalar localtime, "] starting: ",
+    join(' ', @ARGV), "\n";
+my $exit_code = -1;
+unless (my $pid = fork) {
+    if (defined $pid) {
+        # child process
+        open STDERR, '>&', $logfh
+            or die "failed to redirect STDERR to logfile";
+        open STDOUT, '>&', $logfh
+            or die "failed to redirect STDOUT to logfile";
+        exec @ARGV;
+        die "exec(2) failed:$!:@ARGV";
+    } else {
+        print $logfh, "fork(2) failed:$!\n"
+            unless defined $pid;
+    }
+} else {
+    while (wait == -1) {}
+    $exit_code = $?;
+}
+
+# end
+print $logfh '[', scalar localtime, '] ';
+if ($exit_code == -1) {
+    print $logfh "failed to execute command:$!\n";
+} elsif ($exit_code & 127) {
+    print $logfh "command died with signal:", ($exit_code & 127), "\n";
+} else {
+    print $logfh "command exited with signal:", ($exit_code >> 8), "\n";
+}
+
+# print log to stdout
+if ($exit_code != 0) {
+    open my $fh, '<', $logfile
+        or die "failed to open $logfile:$!";
+    seek $fh, $logpos, 0
+        or die "failed to seek to the appropriate position in logfile:$!";
+    while (my @l = <$fh>) {
+        print @l;
+    }
+    close $fh;
+}
+
+exit($exit_code >> 8);
+
+__END__
+
+=head1 NAME
+
+cronlog - log cron output, and send mail on error
+
+=head1 SYNOPSIS
+
+    cronlog [--logfile=logfile] -- cmd args...
+
+=head1 AUTHOR
+
+Kazuho Oku
+
+=head1 LICENSE
+
+This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
+
+See http://www.perl.com/perl/misc/Artistic.html
+
+=cut
