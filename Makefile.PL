@@ -8,6 +8,7 @@ license 'bsd';
 perl_version '5.8.5';
 
 requires 'Pod::Usage';
+test_requires 'File::Slurp';
 test_requires 'Test::More' => 0.88;
 
 install_script 'cronlog';
