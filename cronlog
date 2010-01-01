@@ -8,13 +8,20 @@ use File::Temp qw(tempfile);
 use Getopt::Long;
 use Pod::Usage;
 
-my ($logfile, $opt_help);
+our $VERSION = '0.01';
+
+my ($logfile, $opt_help, $opt_version);
 GetOptions(
     'logfile=s' => \$logfile,
     'help'      => \$opt_help,
+    'version'   => \$opt_version,
 ) or pod2usage(1);
-pod2usage(0)
-    if $opt_help;
+if ($opt_help) {
+    pod2usage(0);
+} elsif ($opt_version) {
+    print "$VERSION\n";
+    exit 0;
+}
 die "no args"
     unless @ARGV;
 
@@ -89,6 +96,22 @@ cronlog - log output of a cron job, and send mail on error
 =head1 SYNOPSIS
 
     cronlog [--logfile=logfile] -- cmd args...
+
+=head1 DESCRIPTION
+
+Cronlog is a wrapper script for running cron tasks.  It does the following:
+
+=over 4
+
+=item logs the output of the command
+
+If logfile is specified, stdout and stderr of the command will be logged to the file so that it could be used for later inspection.  If not specified, the outputs will not be logged.
+
+=item prints the output on error
+
+Cronlog prints the outputs the command if and only if the command execution failed (i.e. fails to start, or returns a non-zero exit code, or killed by a signal).  In other words, this behaviour causes L<cron> to send mail when and only when an error occurs.
+
+=back
 
 =head1 AUTHOR
 
