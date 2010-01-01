@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 
+use Fcntl ();
 use File::Temp qw(tempfile);
 use Getopt::Long;
 use Pod::Usage;
@@ -30,6 +31,8 @@ print $logfh '-'x78, "\n";
 my $logpos = tell $logfh;
 die "failed to obtain position of logfile:$!"
     if $logpos == -1;
+seek $logfh, $logpos, Fcntl::SEEK_SET
+    or die "cannot seek within logfile:$!";
 
 # exec
 print $logfh '[', scalar localtime, "] starting: ",
@@ -67,7 +70,7 @@ if ($exit_code == -1) {
 if ($exit_code != 0) {
     open my $fh, '<', $logfile
         or die "failed to open $logfile:$!";
-    seek $fh, $logpos, 0
+    seek $fh, $logpos, Fcntl::SEEK_SET
         or die "failed to seek to the appropriate position in logfile:$!";
     while (my @l = <$fh>) {
         print @l;
