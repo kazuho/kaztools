@@ -81,7 +81,7 @@ __END__
 
 =head1 NAME
 
-cronlog - log cron output, and send mail on error
+cronlog - log output of a cron job, and send mail on error
 
 =head1 SYNOPSIS
 
@@ -90,11 +90,5 @@ cronlog - log cron output, and send mail on error
 =head1 AUTHOR
 
 Kazuho Oku
-
-=head1 LICENSE
-
-This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
-
-See http://www.perl.com/perl/misc/Artistic.html
 
 =cut
