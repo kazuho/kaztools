@@ -63,7 +63,7 @@ if ($exit_code == -1) {
 } elsif ($exit_code & 127) {
     print $logfh "command died with signal:", ($exit_code & 127), "\n";
 } else {
-    print $logfh "command exited with signal:", ($exit_code >> 8), "\n";
+    print $logfh "command exited with code:", ($exit_code >> 8), "\n";
 }
 
 # print log to stdout
