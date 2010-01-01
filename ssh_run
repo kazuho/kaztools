@@ -1,0 +1,60 @@
+#! /usr/bin/perl
+
+use 5.008;
+use strict;
+use warnings;
+
+use File::Basename qw(basename);
+use Getopt::Long;
+use Pod::Usage;
+
+my $opt_help;
+
+GetOptions(
+    help => \$opt_help,
+) or exit 1;
+pod2usage()
+    if $opt_help;
+
+# parse args
+die "no host"
+    unless @ARGV;
+my $host = shift @ARGV;
+die "no command"
+    unless @ARGV;
+my $cmd_path = shift @ARGV;
+my @cmd_args = @ARGV;
+
+my $tmpdir = $ENV{REMOTE_TMPDIR} || "/tmp/ssh_run.$$";
+
+# copy
+system(qw(rsync -avqz -e ssh --delete), $cmd_path, "$host:$tmpdir") == 0
+    or die "an error occured while copying command to remote host";
+# run
+my $exit_code = system(
+    'ssh', $host, "$tmpdir", @cmd_args,
+);
+# cleanup
+system 'ssh', $host, qw(rm -rf), $tmpdir;
+
+exit $exit_code;
+
+__END__
+
+=head1 NAME
+
+ssh_run - runs given executable script on remote machine
+
+=head1 SYNOPSIS
+
+    % ssh_run user@host cmd_file args
+
+=head1 TODO
+
+=over 4
+
+=item support for sending multiple files required for execution
+
+=back
+
+=cut
