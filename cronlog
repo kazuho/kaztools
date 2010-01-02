@@ -42,8 +42,13 @@ seek $logfh, $logpos, SEEK_SET
     or die "cannot seek within logfile:$!";
 
 # exec
-print $logfh '[', scalar localtime, "] starting: ",
-    join(' ', @ARGV), "\n";
+print $logfh (
+    '[', scalar localtime, '] ',
+    (do { my $h = `hostname 2> /dev/null`; chomp $h; $h }),
+    ' starting: ',
+    join(' ', @ARGV),
+    "\n",
+);
 my $exit_code = -1;
 unless (my $pid = fork) {
     if (defined $pid) {
