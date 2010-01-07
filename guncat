@@ -1,0 +1,20 @@
+#! /usr/bin/perl
+
+use strict;
+use warnings;
+
+while (@ARGV) {
+    my $file = shift @ARGV;
+    my $fh;
+    if ($file =~ /\.gz$/) {
+        open $fh, '|-', 'gzip', '-cd', $file
+            or die "failed to open file with gzip:$file:$!";
+    } else {
+        open $fh, '<', $file
+            or die "failed to open file:$file:$!";
+    }
+    while (my $l = <$fh>) {
+        print $l;
+    }
+    close $fh;
+}
