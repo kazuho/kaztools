@@ -10,9 +10,10 @@ use Pod::Usage;
 
 our $VERSION = '0.01';
 
-my ($logfile, $opt_help, $opt_version);
+my ($logfile, $opt_timestamp, $opt_help, $opt_version);
 GetOptions(
     'logfile=s' => \$logfile,
+    'timestamp' => \$opt_timestamp,
     'help'      => \$opt_help,
     'version'   => \$opt_version,
 ) or pod2usage(1);
@@ -41,41 +42,48 @@ die "failed to obtain position of logfile:$!"
 seek $logfh, $logpos, SEEK_SET
     or die "cannot seek within logfile:$!";
 
+pipe my $logrh, my $logwh
+    or die "failed to create pipe:$!";
+
 # exec
-print $logfh (
-    '[', scalar localtime, '] ',
-    (do { my $h = `hostname 2> /dev/null`; chomp $h; $h }),
-    ' starting: ',
-    join(' ', @ARGV),
-    "\n",
+_log(
+    do { my $h = `hostname 2> /dev/null`; chomp $h; $h }
+    . ' starting: ' . join(' ', @ARGV) . "\n",
 );
 my $exit_code = -1;
 unless (my $pid = fork) {
     if (defined $pid) {
         # child process
-        open STDERR, '>&', $logfh
+        close $logrh;
+        close $logfh;
+        open STDERR, '>&', $logwh
             or die "failed to redirect STDERR to logfile";
-        open STDOUT, '>&', $logfh
+        open STDOUT, '>&', $logwh
             or die "failed to redirect STDOUT to logfile";
+        close $logwh;
         exec @ARGV;
         die "exec(2) failed:$!:@ARGV";
     } else {
+        close $logrh;
+        close $logwh;
         print $logfh, "fork(2) failed:$!\n"
             unless defined $pid;
     }
 } else {
+    close $logwh;
+    _log($_) while <$logrh>;
+    close $logrh;
     while (wait == -1) {}
     $exit_code = $?;
 }
 
 # end
-print $logfh '[', scalar localtime, '] ';
 if ($exit_code == -1) {
-    print $logfh "failed to execute command:$!\n";
+    _log("failed to execute command:$!\n");
 } elsif ($exit_code & 127) {
-    print $logfh "command died with signal:", ($exit_code & 127), "\n";
+    _log("command died with signal:" . ($exit_code & 127) . "\n");
 } else {
-    print $logfh "command exited with code:", ($exit_code >> 8), "\n";
+    _log("command exited with code:" . ($exit_code >> 8) ."\n");
 }
 
 # print log to stdout
@@ -92,6 +100,14 @@ if ($exit_code != 0) {
 
 exit($exit_code >> 8);
 
+sub _log {
+    my ($line, $timestamp) = @_;
+    print $logfh (
+        ($timestamp || $opt_timestamp ? '[' . scalar(localtime) . '] ' : ''),
+        $line,
+    );
+}
+
 __END__
 
 =head1 NAME
@@ -100,7 +116,7 @@ cronlog - log output of a cron job, and send mail on error
 
 =head1 SYNOPSIS
 
-    cronlog [--logfile=logfile] -- cmd args...
+    cronlog [--logfile=logfile] [--timestamp] -- cmd args...
 
 =head1 DESCRIPTION
 
