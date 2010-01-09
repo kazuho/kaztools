@@ -9,11 +9,18 @@ use Pod::Usage;
 
 our $VERSION = '0.01';
 
-my ($opt_help, $opt_version, $opt_ignore_case);
+my (
+    $opt_help, $opt_version, $opt_pipe, $opt_ignore_case, $opt_touch,
+    $opt_match_str,
+);
+
 GetOptions(
     help          => \$opt_help,
     version       => \$opt_version,
+    'pipe'        => \$opt_pipe,
     'ignore-case' => \$opt_ignore_case,
+    'touch=s'     => \$opt_touch,
+    'match=s'     => \$opt_match_str,
 ) or pod2usage(1);
 if ($opt_help) {
     pod2usage(0);
@@ -21,27 +28,57 @@ if ($opt_help) {
     print "$VERSION\n";
     exit 0;
 }
+die "mandatory option: --touch (-t) is missing\n"
+    unless defined $opt_touch;
+die "mandatory option: --match (-m) is missing\n"
+    unless defined $opt_match_str;
 
-die "no args, see --help\n"
-    unless @ARGV == 2;
-
-my ($file, $re_str) = @ARGV;
-
-my $re;
+# prepare compiled expr
+my $match;
 eval {
-    $re = $opt_ignore_case ? qr/$re_str/i : qr/$re_str/;
+    $match = $opt_match_str ? qr/$opt_match_str/i : qr/$opt_match_str/;
 };
 die $@ if $@;
 
+# prepare output handle
+my $fh;
+if ($opt_pipe) {
+    die "no command\n"
+        unless @ARGV;
+    pipe my $rfh, $fh
+        or die "failed to create pipe:$!";
+    unless (my $pid = fork) {
+        die "fork failed:$!"
+            unless defined $pid;
+        # child process
+        close $fh;
+        open STDIN, '<&', $rfh
+            or die "failed to redirect piped input to stdin:$!";
+        exec @ARGV;
+        die "failed to execute:$ARGV[0]:$!";
+    }
+} else {
+    die "too many arguments\n"
+        if @ARGV > 1;
+    if (@ARGV == 0 || $ARGV[0] eq '-') {
+        $fh = \*STDOUT;
+    } else {
+        open $fh, '>>', $ARGV[0]
+            or die "failed to open file:$ARGV[0]:$!";
+    }
+}
+
+# main loop
+$| = 1;
 while (my $l = <STDIN>) {
-    print $l;
-    if ($l =~ /$re/) {
-        utime undef, undef, $file or do {
+    print $fh $l;
+    if ($l =~ /$match/) {
+        utime undef, undef, $opt_touch or do {
             if ($! == Errno::ENOENT) {
-                open my $fh, '>', $file
-                    or die "failed to create file:$file:$!";
+                open my $fh, '>', $opt_touch
+                    or die "failed to create file:$opt_touch:$!";
             } else {
-                die "failed to touch file:$file:$!";
+                die "failed to touch file:$opt_touch:$!";
             }
         };
     }
@@ -51,20 +88,21 @@ __END__
 
 =head1 NAME
 
-touch_if - touch file if regexp matches, while transfering STDIN to STDOUT
+touch_if - touch another file if regexp matches, while writing STDIN to file
 
 =head1 SYNOPSIS
 
-    touch_if [-i] file_to_touch regexp
+    touch_if [-i] -m regexp -t file_to_touch out_file
+    touch_if [-i] -m regexp -t file_to_touch -p pipe_cmd pipe_args...
     
     # common usage (in httpd.conf)
-    CustomLog "| touch_if /tmp/502.touch ' 502 [^ ]+$' > /dev/null" common
+    CustomLog "| touch_if -m ' 502 [^ ]+$' -t 502.found access_log" common
 
 =head1 DESCRIPTION
 
-Touch_if is a script that works like tee, but instead of saving the input into a file, touchs a file when given regular expression matches the input line.
+Touch_if is a script that writes input from STDIN to file, but while doing so, tests each line of the input against given regular expression, and if it matches, touches another file.
 
-It is useful for detecting errors from log files.  Other processes (like crontab tasks) should be used to check the last-modified date of the touched file and send alerts to administrators.
+It is useful for detecting errors from log output.  Other processes (like crontab tasks) should be used to check the last-modified date of the touched file and send alerts to administrators.
 
 =head1 AUTHOR
 
