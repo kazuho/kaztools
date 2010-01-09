@@ -14,6 +14,7 @@ test_requires 'Test::More' => 0.88;
 install_script 'cronlog';
 install_script 'guncat';
 install_script 'ssh_run';
+install_script 'touch_if';
 
 auto_include;
 auto_install;
