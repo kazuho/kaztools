@@ -1,0 +1,73 @@
+#! /usr/bin/perl
+
+use strict;
+use warnings;
+
+use Errno qw();
+use Getopt::Long;
+use Pod::Usage;
+
+our $VERSION = '0.01';
+
+my ($opt_help, $opt_version, $opt_ignore_case);
+GetOptions(
+    help          => \$opt_help,
+    version       => \$opt_version,
+    'ignore-case' => \$opt_ignore_case,
+) or pod2usage(1);
+if ($opt_help) {
+    pod2usage(0);
+} elsif ($opt_version) {
+    print "$VERSION\n";
+    exit 0;
+}
+
+die "no args, see --help\n"
+    unless @ARGV == 2;
+
+my ($file, $re_str) = @ARGV;
+
+my $re;
+eval {
+    $re = $opt_ignore_case ? qr/$re_str/i : qr/$re_str/;
+};
+die $@ if $@;
+
+while (my $l = <STDIN>) {
+    print $l;
+    if ($l =~ /$re/) {
+        utime undef, undef, $file or do {
+            if ($! == Errno::ENOENT) {
+                open my $fh, '>', $file
+                    or die "failed to create file:$file:$!";
+            } else {
+                die "failed to touch file:$file:$!";
+            }
+        };
+    }
+}
+
+__END__
+
+=head1 NAME
+
+touch_if - touch file if regexp matches, while transfering STDIN to STDOUT
+
+=head1 SYNOPSIS
+
+    touch_if [-i] file_to_touch regexp
+    
+    # common usage (in httpd.conf)
+    CustomLog "| touch_if /tmp/502.touch ' 502 [^ ]+$' > /dev/null" common
+
+=head1 DESCRIPTION
+
+Touch_if is a script that works like tee, but instead of saving the input into a file, touchs a file when given regular expression matches the input line.
+
+It is useful for detecting errors from log files.  Other processes (like crontab tasks) should be used to check the last-modified date of the touched file and send alerts to administrators.
+
+=head1 AUTHOR
+
+Kazuho Oku
+
+=cut
