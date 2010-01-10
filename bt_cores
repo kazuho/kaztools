@@ -1,0 +1,85 @@
+#! /usr/bin/perl
+
+use strict;
+use warnings;
+
+use Getopt::Long;
+use Pod::Usage;
+
+our $VERSION = 0.01;
+
+my ($opt_help, $opt_version, $opt_unlink_core);
+my $opt_delay = 10;
+
+GetOptions(
+    help          => \$opt_help,
+    version       => \$opt_version,
+    'delay=i'     => \$opt_delay,
+    'unlink-core' => \$opt_unlink_core,
+) or pod2usage(1);
+if ($opt_help) {
+    pod2usage(0);
+} elsif ($opt_version) {
+    print "$VERSION\n";
+    exit 0;
+}
+
+while (1) {
+    for my $core_file (<core.*>) {
+        # check if the image is old enough
+        my $mtime = do {
+            my @st = stat $core_file
+                or die "failed to stat file:$core_file:$!";
+            $st[9];
+        };
+        next unless $mtime + $opt_delay < time;
+        # take backtrace
+        (my $bt_file = $core_file) =~ s/^core/bt/;
+        next if -e $bt_file;
+        print "taking backtrace of core file:$core_file\n";
+        open my $fh, '|-', "gdb -batch -c $core_file > $bt_file"
+            or die "failed to start gdb:$!";
+        print $fh "thread apply all bt\n";
+        close $fh;
+        die "gdb exited with status: $?\n"
+            if $? != 0;
+        # unlink if necessary
+        if ($opt_unlink_core) {
+            unlink $core_file
+                or die "failed to unlink core file:$core_file:$!";
+        }
+    }
+    sleep 5;
+}
+
+__END__
+
+=head1 NAME
+
+bt_cores - a daemon that takes stack backtrace of core files automatically
+
+=head1 SYNOPSIS
+
+    bt_cores [-d delay] [-u]
+
+=over 4
+
+=item -d seconds, --delay=seconds
+
+Seconds to wait until the core file is being created (default: 10 seconds).  Increase this variable if bt_core tries to take backtraces of half-written core files.
+
+=item -u, --unlink-core
+
+Removes the core file after taking backtrace.
+
+=back
+
+=head1 DESCRIPTION
+
+Bt_cores is a daemon that waits for core files (that match pattern "core.<pid>") to appear in current directory, and takes backtraces of the images.
+
+=head1 AUTHOR
+
+Kazuho Oku
+
+=cut
