@@ -10,17 +10,20 @@ use Pod::Usage;
 our $VERSION = '0.01';
 
 my (
-    $opt_help, $opt_version, $opt_pipe, $opt_ignore_case, $opt_touch,
-    $opt_match_str,
-);
+    $opt_help, $opt_version, $opt_touch_file, $opt_ignore_case, $opt_match_str,
+    $opt_pipe);
+my $opt_span = 0;
+my $opt_threshold = 1;
 
 GetOptions(
     help          => \$opt_help,
     version       => \$opt_version,
-    'pipe'        => \$opt_pipe,
+    'file=s'      => \$opt_touch_file,
     'ignore-case' => \$opt_ignore_case,
-    'touch=s'     => \$opt_touch,
     'match=s'     => \$opt_match_str,
+    'pipe'        => \$opt_pipe,
+    'span=i'      => \$opt_span,
+    'threshold=i' => \$opt_threshold,
 ) or pod2usage(1);
 if ($opt_help) {
     pod2usage(0);
@@ -29,7 +32,7 @@ if ($opt_help) {
     exit 0;
 }
 die "mandatory option: --touch (-t) is missing\n"
-    unless defined $opt_touch;
+    unless defined $opt_touch_file;
 die "mandatory option: --match (-m) is missing\n"
     unless defined $opt_match_str;
 
@@ -70,17 +73,24 @@ if ($opt_pipe) {
 
 # main loop
 $| = 1;
+my @match_at = map { 0 } (1 .. $opt_threshold);
 while (my $l = <STDIN>) {
     print $fh $l;
     if ($l =~ /$match/) {
-        utime undef, undef, $opt_touch or do {
-            if ($! == Errno::ENOENT) {
-                open my $fh, '>', $opt_touch
-                    or die "failed to create file:$opt_touch:$!";
-            } else {
-                die "failed to touch file:$opt_touch:$!";
-            }
-        };
+        my $now = time;
+        push @match_at, $now;
+        shift @match_at
+            if @match_at > $opt_threshold;
+        if ($match_at[0] + $opt_span >= $now) {
+            utime undef, undef, $opt_touch_file or do {
+                if ($! == Errno::ENOENT) {
+                    open my $fh, '>', $opt_touch_file
+                        or die "failed to create file:$opt_touch_file:$!";
+                } else {
+                    die "failed to touch file:$opt_touch_file:$!";
+                }
+            };
+        }
     }
 }
 
@@ -92,11 +102,34 @@ touch_if - touch another file if regexp matches, while writing STDIN to file
 
 =head1 SYNOPSIS
 
-    touch_if [-i] -m regexp -t file_to_touch out_file
-    touch_if [-i] -m regexp -t file_to_touch -p pipe_cmd pipe_args...
+    touch_if [options] out_file
+    touch_if [options] -p pipe_cmd pipe_args...
     
     # common usage (in httpd.conf)
-    CustomLog "| touch_if -m ' 502 [^ ]+$' -t 502.found access_log" common
+    CustomLog "| touch_if -m ' 50[23] [^ ]+$' -t is_down access_log" common
+
+=over 4
+
+=item -f file_to_touch, --file=file_to_touch (mandatory)
+
+file to be touched when a match (or matches) has been found
+
+=item -m regexp, --match=regexp (mandatory)
+
+regular expression to be applied against each line of input
+
+=item -i, --ignore-case
+
+ignore case
+
+=item -p, --pipe
+
+if not set, touch_if writes the input into out_file.  If set, arguments are treated as a command to spawn to handle the input.
+
+=item -s seconds, --span=seconds (default: 0)
+=item -t count, --threshold=count (default: 1)
+
+touches file if and only if the match has been found more than `count' times within `seconds' seconds
 
 =head1 DESCRIPTION
 
