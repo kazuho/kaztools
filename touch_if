@@ -39,7 +39,7 @@ die "mandatory option: --match (-m) is missing\n"
 # prepare compiled expr
 my $match;
 eval {
-    $match = $opt_match_str ? qr/$opt_match_str/i : qr/$opt_match_str/;
+    $match = $opt_ignore_case ? qr/$opt_match_str/i : qr/$opt_match_str/;
 };
 die $@ if $@;
 
@@ -78,9 +78,8 @@ while (my $l = <STDIN>) {
     print $fh $l;
     if ($l =~ /$match/) {
         my $now = time;
+        shift @match_at;
         push @match_at, $now;
-        shift @match_at
-            if @match_at > $opt_threshold;
         if ($match_at[0] + $opt_span >= $now) {
             utime undef, undef, $opt_touch_file or do {
                 if ($! == Errno::ENOENT) {
@@ -103,7 +102,7 @@ touch_if - touch another file if regexp matches, while writing STDIN to file
 =head1 SYNOPSIS
 
     touch_if [options] out_file
-    touch_if [options] -p pipe_cmd pipe_args...
+    touch_if [options] -p -- pipe_cmd pipe_args...
     
     # common usage (in httpd.conf)
     CustomLog "| touch_if -m ' 50[23] [^ ]+$' -t is_down access_log" common
