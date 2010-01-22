@@ -8,6 +8,8 @@ use Test::More;
 
 plan skip_all => '$ENV{TEST_BT_CORES} not set, skipping all tests'
     unless $ENV{TEST_BT_CORES};
+plan skip_all => "/cores does not exist, please set /proc/sys/kernel/core_pattern to /cores/core.\%p"
+    unless -d '/cores';
 
 my $pwd = getcwd;
 my $tempdir = tempdir(CLEANUP => 1);
