@@ -9,7 +9,7 @@ use File::Temp qw(tempdir);
 use Getopt::Long;
 use Pod::Usage;
 
-our $VERSION = 0.01;
+our $VERSION = 0.02;
 
 my ($opt_help, $opt_version, $opt_unlink_core);
 my $opt_delay = 10;
@@ -132,7 +132,11 @@ bt_cores - a daemon that takes stack backtrace of core files automatically
 
 =head1 SYNOPSIS
 
-    bt_cores [-u]
+  # setup (as root)
+  echo /tmp/core.%p > /proc/sys/kernel/core_pattern
+
+  # run the daemon (converts /tmp/core.<pid> to /tmp/bt.<pid>)
+  bt_cores -u
 
 =over 4
 

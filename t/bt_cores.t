@@ -2,12 +2,22 @@ use strict;
 use warnings;
 
 use Cwd qw(getcwd);
+use File::Basename qw(dirname);
 use File::Temp qw(tempdir);
 use POSIX qw(:sys_wait_h);
 use Test::More;
 
 plan skip_all => '$ENV{TEST_BT_CORES} not set, skipping all tests'
     unless $ENV{TEST_BT_CORES};
+
+my $coredir = '/cores';
+if ($^O =~ /^linux$/i) {
+    open my $fh, '<', '/proc/sys/kernel/core_pattern'
+        or die "failed to open file:/proc/sys/kernel/core_pattern:$!";
+    my $cp = <$fh>;
+    chomp $cp;
+    $coredir = dirname $cp;
+}
 
 my $pwd = getcwd;
 my $tempdir = tempdir(CLEANUP => 1);
@@ -37,7 +47,7 @@ unless ($segv_pid) {
 }
 
 # wait for backtrace file to appear, and stop bt_cores
-while (! -e "/cores/bt.$segv_pid") {
+while (! -e "$coredir/bt.$segv_pid") {
     sleep 1;
 }
 sleep 3;
@@ -45,7 +55,7 @@ kill 15, $bt_cores_pid;
 
 # check backtrace
 like do {
-    open my $fh, '<', "/cores/bt.$segv_pid"
+    open my $fh, '<', "$coredir/bt.$segv_pid"
         or die "failed to open file:bt.$segv_pid:$!";
     join '', <$fh>;
 }, qr/bt_cores_segv\.c:3/, 'check backtrace';
