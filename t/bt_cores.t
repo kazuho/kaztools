@@ -36,7 +36,7 @@ my $segv_pid = fork;
 die "fork failed:$!"
     unless defined $segv_pid;
 unless ($segv_pid) {
-    exec("$tempdir/segv");
+    exec qw(/bin/sh -c), "ulimit -c unlimited && exec $tempdir/segv";
     die "failed to invoke $tempdir/segv:$!";
 }
 
@@ -53,7 +53,5 @@ like do {
         or die "failed to open file:bt.$segv_pid:$!";
     join '', <$fh>;
 }, qr/bt_cores_segv\.c:3/, 'check backtrace';
-
-unlink "/cores/bt.$segv_pid";
 
 done_testing;
