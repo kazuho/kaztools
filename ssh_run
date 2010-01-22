@@ -7,6 +7,7 @@ use warnings;
 use File::Basename qw(basename);
 use Getopt::Long;
 use Pod::Usage;
+use POSIX qw(:sys_wait_h);
 
 my $opt_help;
 
@@ -31,9 +32,13 @@ my $tmpdir = $ENV{REMOTE_TMPDIR} || "/tmp/ssh_run.$$";
 system(qw(rsync -avqz -e ssh --delete), $cmd_path, "$host:$tmpdir") == 0
     or die "an error occured while copying command to remote host";
 # run
-my $exit_code = system(
-    'ssh', $host, "$tmpdir", @cmd_args,
-);
+my $exit_code = system('ssh', $host, "$tmpdir", @cmd_args);
+if (WIFEXITED($exit_code)) {
+    $exit_code = WEXITSTATUS($exit_code);
+} else {
+    $exit_code = 255;
+}
+
 # cleanup
 system 'ssh', $host, qw(rm -rf), $tmpdir;
 
