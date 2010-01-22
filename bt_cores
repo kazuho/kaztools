@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 
+use Digest::MD5 qw(md5_hex);
 use Getopt::Long;
 use Pod::Usage;
 
@@ -14,7 +15,6 @@ my $opt_delay = 10;
 GetOptions(
     help          => \$opt_help,
     version       => \$opt_version,
-    'delay=i'     => \$opt_delay,
     'unlink-core' => \$opt_unlink_core,
 ) or pod2usage(1);
 if ($opt_help) {
@@ -25,20 +25,24 @@ if ($opt_help) {
 }
 
 while (1) {
-    for my $core_file (<core.*>) {
-        # check if the image is old enough
-        my $mtime = do {
-            my @st = stat $core_file
-                or die "failed to stat file:$core_file:$!";
-            $st[9];
-        };
-        next unless $mtime + $opt_delay < time;
+    # build list of files (with checksum)
+    my %core_files = map {
+        $_ => md5_file($_)
+    } grep {
+        ! -e bt_filename($_)
+    } <core.*>;
+    sleep 5;
+    next unless %core_files;
+    for my $core_file (sort keys %core_files) {
+        # skip if the checksum of the core file has changed
+        next if $core_files{$core_file} eq md5_file($core_file);
         # take backtrace
-        (my $bt_file = $core_file) =~ s/^core/bt/;
-        next if -e $bt_file;
         print "taking backtrace of core file:$core_file\n";
-        open my $fh, '|-', "gdb -batch -c $core_file > $bt_file"
-            or die "failed to start gdb:$!";
+        open(
+            my $fh,
+            '|-',
+            "gdb -batch -c $core_file > @{[bt_filename($core_file)]} 2>&1",
+        ) or die "failed to start gdb:$!";
         print $fh "thread apply all bt\n";
         close $fh;
         die "gdb exited with status: $?\n"
@@ -49,7 +53,22 @@ while (1) {
                 or die "failed to unlink core file:$core_file:$!";
         }
     }
-    sleep 5;
+}
+
+sub bt_filename {
+    my $fn = shift;
+    $fn =~ s/^core/bt/;
+    $fn;
+}
+
+sub md5_file {
+    my $fn = shift;
+    open my $fh, '<', $fn
+	or die "failed to open $fn:$!";
+    my $md5 = Digest::MD5->new;
+    $md5->addfile($fh);
+    close $fh;
+    $md5->hexdigest;
 }
 
 __END__
@@ -60,13 +79,9 @@ bt_cores - a daemon that takes stack backtrace of core files automatically
 
 =head1 SYNOPSIS
 
-    bt_cores [-d delay] [-u]
+    bt_cores [-u]
 
 =over 4
-
-=item -d seconds, --delay=seconds
-
-Seconds to wait until the core file is being created (default: 10 seconds).  Increase this variable if bt_core tries to take backtraces of half-written core files.
 
 =item -u, --unlink-core
 
