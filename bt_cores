@@ -25,6 +25,27 @@ if ($opt_help) {
     exit 0;
 }
 
+if ($^O =~ /^darwin$/i) {
+    chdir '/cores'
+	or die "failed to chdir to /cores, the directory where OSX saves core files:$!";
+} elsif ($^O =~ /^linux$/i) {
+    my $core_pattern = do {
+	open my $fh, '<', '/proc/sys/kernel/core_pattern'
+	    or die "failed to open file:/proc/sys/kernel/core_pattern:$!";
+	<$fh>;
+    };
+    chomp $core_pattern;
+    die "/proc/sys/kernel/core_pattern should be set to /<core-dir>/core.%p"
+	unless basename($core_pattern) =~ m|core\.%p$|;
+    if ($core_pattern =~ m|^/|) {
+	my $dir = dirname $core_pattern;
+	chdir $dir
+	    or die "failed to chdir to dir:$dir:$!";
+    }
+} else {
+    warn "unknown OS, bt_cores may not work as expected";
+}
+
 my $tempdir = tempdir(CLEANUP => 1);
 
 { # prepare gdb command file (gdb on ubuntu 9 does not seem to read from STDIN)

@@ -8,8 +8,6 @@ use Test::More;
 
 plan skip_all => '$ENV{TEST_BT_CORES} not set, skipping all tests'
     unless $ENV{TEST_BT_CORES};
-plan skip_all => "/cores does not exist, please set /proc/sys/kernel/core_pattern to /cores/core.\%p"
-    unless -d '/cores';
 
 my $pwd = getcwd;
 my $tempdir = tempdir(CLEANUP => 1);
@@ -25,8 +23,6 @@ my $bt_cores_pid = fork;
 die "fork failed:$!"
     unless defined $bt_cores_pid;
 unless ($bt_cores_pid) {
-    chdir '/cores'
-        or die "failed to chdir to /cores:$!";
     exec "$pwd/blib/script/bt_cores", '-u'
         or die "failed to exec bt_cores:$!";
 }
