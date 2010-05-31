@@ -32,7 +32,7 @@ if ($logfile) {
     open $logfh, '>>', $logfile
         or die "failed to open file:$logfile:$!";
 } else {
-    ($logfh, $logfile) = tempfile();
+    ($logfh, $logfile) = tempfile(UNLINK => 1);
 }
 autoflush $logfh 1;
 print $logfh '-'x78, "\n";
