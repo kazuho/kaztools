@@ -9,10 +9,11 @@ use Getopt::Long;
 use Pod::Usage;
 use POSIX qw(:sys_wait_h);
 
-my $opt_help;
+my ($opt_help, $opt_prefix);
 
 GetOptions(
-    help => \$opt_help,
+    help       => \$opt_help,
+    'prefix:s' => \$opt_prefix,
 ) or exit 1;
 pod2usage()
     if $opt_help;
@@ -32,7 +33,11 @@ my $tmpdir = $ENV{REMOTE_TMPDIR} || "/tmp/ssh_run.$$";
 system(qw(rsync -avqz -e ssh --delete), $cmd_path, "$host:$tmpdir") == 0
     or die "an error occured while copying command to remote host";
 # run
-my $exit_code = system('ssh', $host, "$tmpdir", @cmd_args);
+my $exit_code = system(
+    'ssh', $host,
+    (defined $opt_prefix ? ($opt_prefix) : ()),
+    "$tmpdir", @cmd_args,
+);
 if (WIFEXITED($exit_code)) {
     $exit_code = WEXITSTATUS($exit_code);
 } else {
@@ -52,7 +57,7 @@ ssh_run - runs given executable script on remote machine
 
 =head1 SYNOPSIS
 
-    % ssh_run user@host cmd_file args
+    % ssh_run [--prefix=prefix_cmd] user@host cmd_file [args...]
 
 =head1 TODO
 
