@@ -1,0 +1,81 @@
+#! /usr/bin/perl
+
+use strict;
+use warnings;
+use Errno;
+use Getopt::Long;
+
+my ($opt_print_fn, $opt_last_file, $opt_help);
+
+Getopt::Long::Configure('bundling');
+GetOptions(
+    'f' => \$opt_print_fn,
+    'l' => \$opt_last_file,
+    'h' => \$opt_help,
+) or exit 1;
+
+if ($opt_help) {
+    print << "...";
+Usage: $0 [opts]
+Options:
+  -f  print filename instead of printing contents to stdout
+  -l  open last file
+  -h  print this help
+
+...
+    exit 0;
+}
+
+my $fn = shift @ARGV || do {
+    # create dir
+    my $datadir = $ENV{VIP_HOME} || "$ENV{HOME}/vip";
+    mkdir $datadir or do {
+        die "failed to create data dir:$datadir:$!"
+            unless $! == Errno::EEXIST;
+    };
+    my $fn;
+    if ($opt_last_file) {
+        # determine the last file
+        my @files = sort grep { m{/[0-9]{8}-[0-9]{6}-[0-9]+$} } <$datadir/*>;
+        die "no vip file found in directory: $datadir"
+            unless @files;
+        $fn = pop @files;
+    } else {
+        # build filename
+        my @t = localtime;
+        for (my $i = 1; ; $i++) {
+            $fn = sprintf(
+                '%s/%04d%02d%02d-%02d%02d%02d-%d',
+                $datadir,
+                $t[5] + 1900, $t[4] + 1, $t[3], $t[2], $t[1], $t[0],
+                $i,
+            );
+            last unless -e $fn;
+        }
+    }
+    $fn;
+};
+
+# run vi
+unless (my $pid = fork) {
+    die "fork failed:$!" unless defined $pid;
+    # child process
+    open STDOUT, '>&', STDERR
+        or die "failed to reopen stderr:$!";
+    system($ENV{EDITOR} || 'vi', $fn) == 0
+        or die "vi exited with non-zero return code:$?";
+    exit 0;
+}
+while (wait == -1) {}
+
+# print file, if exists
+if (-e $fn) {
+    if ($opt_print_fn) {
+	print "$fn\n";
+    } else {
+	open my $fh, '<', $fn
+	    or die "failed to open file:$fn:$!";
+	print join '', <$fh>;
+	close $fh;
+    }
+}
