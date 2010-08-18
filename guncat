@@ -7,7 +7,7 @@ while (@ARGV) {
     my $file = shift @ARGV;
     my $fh;
     if ($file =~ /\.gz$/) {
-        open $fh, '|-', 'gzip', '-cd', $file
+        open $fh, '-|', 'gzip', '-cd', $file
             or die "failed to open file with gzip:$file:$!";
     } else {
         open $fh, '<', $file

@@ -31,7 +31,7 @@ if ($opt_help) {
     print "$VERSION\n";
     exit 0;
 }
-die "mandatory option: --touch (-t) is missing\n"
+die "mandatory option: --file (-f) is missing\n"
     unless defined $opt_touch_file;
 die "mandatory option: --match (-m) is missing\n"
     unless defined $opt_match_str;
@@ -105,7 +105,7 @@ touch_if - touch another file if regexp matches, while writing STDIN to file
     touch_if [options] -p -- pipe_cmd pipe_args...
     
     # common usage (in httpd.conf)
-    CustomLog "| touch_if -m ' 50[23] [^ ]+$' -t is_down access_log" common
+    CustomLog "| touch_if -m ' 50[23] [^ ]+$' -f is_down access_log" common
 
 =over 4
 
@@ -126,6 +126,7 @@ ignore case
 if not set, touch_if writes the input into out_file.  If set, arguments are treated as a command to spawn to handle the input.
 
 =item -s seconds, --span=seconds (default: 0)
+
 =item -t count, --threshold=count (default: 1)
 
 touches file if and only if the match has been found more than `count' times within `seconds' seconds
