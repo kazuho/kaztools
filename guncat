@@ -3,6 +3,8 @@
 use strict;
 use warnings;
 
+undef $/;
+
 while (@ARGV) {
     my $file = shift @ARGV;
     my $fh;
