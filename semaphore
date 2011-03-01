@@ -1,0 +1,80 @@
+#! /usr/bin/perl
+
+use strict;
+use warnings;
+
+use Errno qw(EWOULDBLOCK);
+use Fcntl qw(F_SETFD LOCK_EX LOCK_NB LOCK_UN O_CREAT O_RDWR);
+use Getopt::Long;
+use Pod::Usage;
+
+my $interval = 0.1;
+my $max;
+my $file;
+
+GetOptions(
+    'interval=i' => \$interval,
+    'max=i'      => \$max,
+    'file=s'     => \$file,
+    help         => sub { pod2usage(0); },
+) || exit(1);
+die "mandatory option --file=f is missing\n"
+    unless defined $file;
+die "mandatory option --max=n is missing\n"
+    unless $max;
+my @argv = @ARGV
+    or die "no command\n";
+
+my $lockfh = acquire_lock();
+exec(@argv)
+    or die "failed to exec: $argv[0], $!";
+
+sub acquire_lock {
+    # open the master and lock it
+    open my $gfh, '>>', $file
+        or die "failed to open file: $file, $!";
+    flock($gfh, LOCK_EX)
+        or die "failed to lock file: $file, $!";
+    while (1) {
+        # TODO: better algo...
+        for (my $i = 0; $i < $max; $i++) {
+            # open the slot file and wait until we obtain exlock
+            open my $slot_fh, '>>', "$file.$i"
+                or die "failed to open file: $file.$i, $!";
+            # clear O_CLOEXEC set by perl's open
+            fcntl($slot_fh, F_SETFD, 0)
+                or die "failed to disable O_CLOEXEC, $!";
+            flock($slot_fh, LOCK_EX | LOCK_NB)
+                and return $slot_fh;
+            die "flock failed: $!"
+                unless $! == EWOULDBLOCK;
+        }
+        sleep $interval;
+    }
+}
+
+__END__
+
+=head1 NAME
+
+semaphore - controls concurrency of a command
+
+=head1 SYNOPSIS
+
+semaphore [options] -- cmd ...
+
+=head1 OPTIONS
+
+=head2 --file=prefix
+
+prefix of the filename(s) to be used for controlling the lock
+
+=head2 --max=concurrency
+
+maximum concurrency
+
+=head2 --interval=seconds
+
+interval to poll for an empty slot (default: 0.1 seconds)
+
+=cut
