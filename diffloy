@@ -1,0 +1,416 @@
+#! /usr/bin/perl
+
+package App::Diffloy;
+
+use strict;
+use warnings;
+
+use Carp qw(croak);
+use Cwd qw(abs_path);
+use Fcntl qw(LOCK_EX);
+use Getopt::Long qw(GetOptionsFromArray);
+use List::Util qw(max);
+use Pod::Usage;
+use POSIX qw(:errno_h WIFEXITED WEXITSTATUS WIFSIGNALED WTERMSIG);
+
+sub new {
+    my $klass = shift;
+    return bless {
+        full_interval => $ENV{DIFFLOY_FULL_INTERVAL} || 100,
+        rsync_opts    => [ qw(-av) ],
+        tar_opts      => [ qw(-zf) ],
+        @_,
+    }, $klass;
+}
+
+for my $n (qw(full_interval base_dir rsync_opts tar_opts)) {
+    no strict 'refs';
+    *{__PACKAGE__ . "::$n"} = sub {
+        my $n = shift;
+        sub {
+            return $_[0]->{$n} if @_ == 1;
+            return $_[0]->{$n} = $_[1] if @_ == 2;
+            shift->{$n} = \@_;
+        };
+    }->($n);
+}
+
+sub doit {
+    my $self = shift;
+    my $cmd = shift
+        or die "no command";
+    pod2usage(-verbose => 2)
+        if $cmd =~ /^(?:--|)help$/;
+    $cmd =~ s/^(init|commit|reset|version|up)$/cmd_$1/
+        or die "unknown command:$cmd";
+    my $base_dir = shift
+        or die "base directory not specified";
+    $self->base_dir(abs_path($base_dir));
+    $self->$cmd(@_);
+}
+
+sub cmd_init {
+    my $self = shift;
+    my $base_dir = $self->base_dir;
+    die "directory: $base_dir already exists"
+        if -e $base_dir;
+    mkdir $base_dir
+        or die "failed to create directory:$base_dir:$!";
+    for my $sub_dir (qw(.image)) {
+        mkdir "$base_dir/$sub_dir"
+            or die "failed to create directory:$base_dir/$sub_dir:$!";
+    }
+}
+
+sub cmd_commit {
+    my ($self, @args) = @_;
+    # parse args
+    my $target_dir = @args && pop @args;
+    die "directory: $target_dir does not exist"
+        unless -d $target_dir;
+    $target_dir =~ s|/$||;
+    $target_dir = abs_path($target_dir);
+    chdir $self->base_dir
+        or die "failed to chdir to @{[$self->base_dir]}:$!";
+    # start creating the image
+    $self->_log("obtaining lock...");
+    $self->_lock();
+    my $version = $self->_get_version();
+    $version++;
+    if ($version != 1) {
+        # create diff and apply
+        $self->_run(
+            'rsync',
+            @{$self->rsync_opts},
+            '--write-batch=.new_batch',
+	    @args,
+            "$target_dir/",
+            '.image/',
+        );
+        $self->_run(
+            'gzip', '.new_batch',
+        );
+        $self->_run(
+            'unlink', '.new_batch.sh',
+        );
+        $self->_run(
+            'mv', '.new_batch.gz', "$version.rsync.batch.gz"
+        );
+    }
+    if ($self->_create_full_image($version)) {
+        # create full image
+        $self->_run(
+            'sh', '-c',
+            sprintf(
+                'cd %s && tar -c %s %s .',
+                $target_dir,
+                join(' ', @{$self->tar_opts}),
+                "@{[$self->base_dir]}/.full.tar.gz",
+            ),
+        );
+        $self->_run(
+            'mv', '.full.tar.gz', "$version.tar.gz",
+        );
+        if ($version == 1) {
+            $self->_run(
+                'sh', '-c',
+                sprintf(
+                    'cd .image && tar -x %s ../1.tar.gz',
+                    join(' ', @{$self->tar_opts}),
+                ),
+            );
+        }
+    }
+    $self->_log("removing lock...");
+    $self->_unlock();
+    $self->_log("successfully created distribution (version $version)");
+}
+
+sub _create_full_image {
+    my ($self, $version) = @_;
+    return $version % $self->full_interval == 1;
+}
+
+sub cmd_reset {
+    my ($self, @args) = @_;
+    my $force;
+    GetOptionsFromArray(
+        \@args,
+        force   => \$force,
+    ) or exit(1);
+    chdir $self->base_dir
+        or die "failed to chdir to @{[$self->base_dir]}:$!";
+    if (! -e '.lock') {
+        die "the repository is already in a consistent state (use --force to reset anyway)"
+            unless $force;
+        $self->_lock();
+    }
+    # obtain version
+    my $version = $self->_get_version();
+    $self->_log("resetting to version $version");
+    # clear the image dir
+    $self->_run(
+        'rm', '-rf', '.image',
+    );
+    # find the newest full image
+    my $full_ver = $self->_find_full_version();
+    # apply the diffs
+    $self->_run('mkdir', '.image');
+    $self->_run(
+        'sh', '-c',
+        sprintf(
+            'cd .image && tar -x %s ../%s.tar.gz',
+            join(' ', @{$self->tar_opts}),
+            $full_ver,
+        ),
+    );
+    my $max_ver = $self->_get_version();
+    for (my $ver = $full_ver + 1; $ver <= $max_ver; $ver++) {
+        $self->_run(
+            'sh', '-c',
+            sprintf(
+                'cd .image && gzip -d < ../%s.rsync.batch.gz | rsync --read-batch=- %s .',
+                $ver,
+                join(' ', @{$self->rsync_opts}),
+            ),
+        );
+    }
+    # unlock
+    $self->_log("removing lock...");
+    $self->_unlock();
+    $self->_log("completed recovery");
+}
+
+sub cmd_version {
+    my $self = shift;
+    chdir $self->base_dir
+        or die "failed to chdir to @{[$self->base_dir]}:$!";
+    my $version = $self->_get_version();
+    print "$version\n";
+}
+
+sub cmd_up {
+    my ($self, @args) = @_;
+    # parse args
+    my ($force, $full);
+    GetOptionsFromArray(
+        \@args,
+        force => \$force,
+        full  => \$full,
+    ) or exit(1);
+    my $target_dir = @args && pop @args;
+    $target_dir =~ s|/$||;
+    # prepare
+    my $target_ver;
+    if (! -e "$target_dir/.diffloy.version") {
+        $self->_run(
+            'mkdir', '-p', $target_dir,
+        );
+    } else {
+        $target_ver = _read_file("$target_dir/.diffloy.version");
+    }
+    # chdir to dist
+    $target_dir = abs_path($target_dir);
+    chdir $self->base_dir
+        or die "failed to chdir to @{[$self->base_dir]}:$!";
+    # obtain version numbers
+    my $latest_ver = $self->_get_version();
+    # consistency check (and adjustment for full restore on --force)
+    if (-e "$target_dir/.diffloy.lock") {
+        die "target is in an inconsistent state, use --force for full restore"
+            unless $force;
+        $full = 1;
+        undef $target_ver;
+    } else {
+        # lock
+        symlink('.', "$target_dir/.diffloy.lock")
+            or die "target seems to be in an inconsistent state (use --force for full restoration)";
+    }
+    # extract
+    if ($target_ver && ! $full && $target_ver != $latest_ver
+            && ! -e "@{[ $target_ver + 1 ]}.rsync.batch.gz") {
+        $full = 1;
+    }
+    if ($full) {
+        $self->_log("performing full restore");
+        my $full_ver = $self->_find_full_version();
+        $self->_run(
+            'rm', '-rf',
+            grep {
+                $_ !~ m{/(?:\.|\.\.|\.diffloy\.[^/]+)$}
+            } (
+                glob("$target_dir/*"),
+                glob("$target_dir/.*"),
+            ),
+        );
+        $self->_run(
+            'sh', '-c',
+            sprintf(
+                'cd %s && tar -x %s %s/%s.tar.gz',
+                $target_dir,
+                join(' ', @{$self->tar_opts}),
+                $self->base_dir,
+                $full_ver,
+            ),
+        );
+        $target_ver = $full_ver;
+    } else {
+        $self->_log("performing incremental restore");
+    }
+    for (my $ver = $target_ver + 1; $ver <= $latest_ver; $ver++) {
+        $self->_run(
+            'sh', '-c',
+            sprintf(
+                'cd %s && gzip -d < %s/%s.rsync.batch.gz | rsync --read-batch=- %s .',
+                $target_dir,
+                $self->base_dir,
+                $ver,
+                join(' ', @{$self->rsync_opts}),
+            ),
+        );
+    }
+    # cleanup
+    _write_file("$target_dir/.diffloy.version", $latest_ver);
+    $self->_run(
+        'rm', "$target_dir/.diffloy.lock",
+    );
+}
+
+sub _run {
+    my ($self, @argv) = @_;
+    print join(' ', @argv), "\n";
+    my $pid = fork;
+    die "fork failed:$!"
+        unless defined $pid;
+    if ($pid == 0) {
+        # child process
+        exec @argv;
+        die "failed to exec $argv[0]:$!";
+    }
+    while (wait() != $pid) {}
+    my $status = $?;
+    return if WIFEXITED($status) && WEXITSTATUS($status) == 0;
+    my $extra_msg = '';
+    if (WIFEXITED($status)) {
+        $extra_msg = ' (exit status: ' . WEXITSTATUS($status) . ')';
+    } elsif (WIFSIGNALED($status)) {
+        $extra_msg = ' (signal: ' . WTERMSIG($status) . ')';
+    }
+    croak "the command exitted with status: $status$extra_msg";
+}
+
+sub _get_version {
+    my $self = shift;
+    max map {
+        /^(\d+)/ and $1
+    } (
+        glob('*.tar.gz'),
+        glob('*.rsync.batch.gz'),
+    );
+}
+
+sub _find_full_version {
+    my $self = shift;
+    chdir $self->base_dir
+        or die "failed to chdir to @{[$self->base_dir]}:$!";
+    my $version = $self->_get_version();
+    for (; $version > 0; $version--) {
+        return $version
+            if -e "$version.tar.gz";
+    }
+    die "no full image (logic flaw)";
+}
+
+sub _lock {
+    my $self = shift;
+    if (symlink '.', '.lock') {
+        # ok
+    } elsif ($! == EEXIST) {
+        die "the distribution is in an incomplete state.  please run \"diffloy reset\"";
+    } else {
+        die "symlink failed:$!";
+    }
+}
+
+sub _unlock {
+    my $self = shift;
+    unless (unlink '.lock') {
+        warn "failed to remove .lock:$!";
+        die "The data might be in inconsistent state.  Please run diffloy reset\n";
+    }
+}
+
+sub _log {
+    my $self = shift;
+    print @_, "\n";
+}
+
+sub _read_file {
+    my $fname = shift;
+    open my $fh, '<', $fname
+        or die "failed to open file:$fname:$!";
+    local $/;
+    join '', <$fh>;
+}
+
+sub _write_file {
+    my ($fname, $content) = @_;
+    open my $fh, '>', $fname
+        or die "failed to open file:$fname:$!";
+    print $fh $content;
+    close $fh;
+}
+
+__PACKAGE__->new->doit(@ARGV);
+
+1;
+__END__
+
+=head1 NAME
+
+diffloy - manage incremental updates
+
+=head1 SYNOPSIS
+
+ # initialize the distribution directory
+ % diffloy init dist_dir
+
+ # commit the contents of src_dir and build the distribution image
+ % diffloy commit dist_dir [rsync_opts] src_dir
+
+ # apply the distribution image to target directory
+ % diffloy up dist_dir target_dir
+
+=head1 DESCRIPTION
+
+C<Diffloy> is a script to manage incremental updates of a diretory tree.
+
+=head2 PREPARATION
+
+Run C<diffloy init> to initialize the distribution directory.  Full images will appear as .tar.gz files, incremental updates are stored as .rsync.batch.gz files.
+
+  % diffloy init dist_dir
+
+=head2 COMMITING UPDATES
+
+To commit changes, run C<diffloy commit>.  The command passes the arguments to rsync to generate incremental updates as well as periodically creating (by default for every 100 commits) full images as well.
+
+  % diffloy commit dist_dir [rsync_opts] source_dir
+
+=head2 TRANSFERRING THE UPDATES
+
+The easiest way for transferring the updates between the servers is to use C<rsync> but other methods can be used as well.  Since a large set of files will be stored under dist_dir/.image, it is advised to only transfer files not starting with a dot to other servers (that receive and have the updates applied), as can be seen in the example below.
+
+  % rsync -av -e ssh source_server:dist_dir/* dest_server:dist_dir/
+
+=head2 APPLYING THE UPDATES
+
+Use the C<diffloy up> command to apply the updates in the dist_dir to target_dir.
+
+  % diffloy up dist_dir target_dir
+
+=head1 AUTHOR
+
+Kazuho Oku
+
+=cut
