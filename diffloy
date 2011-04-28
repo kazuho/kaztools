@@ -401,7 +401,9 @@ To commit changes, run C<diffloy commit>.  The command passes the arguments to r
 
 =head2 TRANSFERRING THE UPDATES
 
-The easiest way for transferring the updates between the servers is to use C<rsync> but other methods can be used as well.  Since a large set of files will be stored under dist_dir/.image, it is advised to only transfer files not starting with a dot to other servers (that receive and have the updates applied), as can be seen in the example below.
+Diffloy does not implement nor have a binding to a particular transfer protocol.  Instead, any method can be used for the purpose.  For example, exporting the dist_dir on the source server using nfs or cifs and mounting it on other servers would be sufficient for small services.
+
+If you are going to transfer the updates by yourself from the distribution server to other servers, then it is advised to not transfer the dotfiles in dist_dir (the files are used to handle the C<diffloy commit> process).  The example below uses rsync to synchronize dist_dir of the distribution server to the server that receives the distribution.
 
   % rsync -av -e ssh source_server:dist_dir/* dest_server:dist_dir/
 
