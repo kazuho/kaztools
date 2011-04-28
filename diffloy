@@ -385,6 +385,8 @@ diffloy - manage incremental updates
 
 C<Diffloy> is a script to manage incremental updates of a diretory tree.
 
+=head1 USAGE
+
 =head2 PREPARATION
 
 Run C<diffloy init> to initialize the distribution directory.  Full images will appear as .tar.gz files, incremental updates are stored as .rsync.batch.gz files.
@@ -407,7 +409,21 @@ The easiest way for transferring the updates between the servers is to use C<rsy
 
 Use the C<diffloy up> command to apply the updates in the dist_dir to target_dir.
 
-  % diffloy up dist_dir target_dir
+  % diffloy up [options] dist_dir target_dir
+
+Supported options are:
+
+=over 4
+
+=item --full
+
+perform a full restore (instead of an incremental restoration)
+
+=item --force
+
+restore a corrupt or an inconsistent target directory (implies --full)
+
+=back
 
 =head1 AUTHOR
 
