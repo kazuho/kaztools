@@ -13,6 +13,7 @@ test_requires 'Test::More' => 0.88;
 
 install_script 'bt_cores';
 install_script 'cronlog';
+install_script 'diffloy';
 install_script 'guncat';
 install_script 'semaphore';
 install_script 'ssh_run';
