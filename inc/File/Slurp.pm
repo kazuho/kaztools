@@ -360,7 +360,7 @@ sub write_file {
 	return 1 ;
 }
 
-# this is for backwards compatibility with the previous File::Slurp module. 
+# this is for backwards compatibility with the previous File::Slurp module.
 # write_file always overwrites an existing file
 
 *overwrite_file = \&write_file ;

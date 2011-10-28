@@ -103,7 +103,7 @@ touch_if - touch another file if regexp matches, while writing STDIN to file
 
     touch_if [options] out_file
     touch_if [options] -p -- pipe_cmd pipe_args...
-    
+
     # common usage (in httpd.conf)
     CustomLog "| touch_if -m ' 50[23] [^ ]+$' -f is_down access_log" common
 

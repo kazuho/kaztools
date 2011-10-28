@@ -392,7 +392,7 @@ sub is_deeply {
     unless( @_ == 2 or @_ == 3 ) {
         my $msg = <<'WARNING';
 is_deeply() takes two or three args, you gave %d.
-This usually means you passed an array or hash instead 
+This usually means you passed an array or hash instead
 of a reference to it
 WARNING
         chop $msg;    # clip off newline so carp() will put in line/file
