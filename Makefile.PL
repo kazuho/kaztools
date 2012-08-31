@@ -18,6 +18,7 @@ install_script 'guncat';
 install_script 'semaphore';
 install_script 'ssh_run';
 install_script 'touch_if';
+install_script 'update_myaddr';
 install_script 'vip';
 
 auto_include;
