@@ -4,7 +4,7 @@ die "Usage: $0 <ifname> <hostname>\n"
     unless @ARGV == 2;
 my ($ifname, $hostname) = @ARGV;
 
-my $addr = `/sbin/ifconfig $ifname | /usr/bin/perl -we '/inet ([0-9.]+) / and print \$1 for <>'`
+my $addr = `LC_ALL=C /sbin/ifconfig $ifname | /usr/bin/perl -we '/inet ([0-9.]+) / and print \$1 for <>'`
     or die "could not obtain IPv4 address of interface $ifname";
 
 my $hosts = '';
