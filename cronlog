@@ -10,10 +10,11 @@ use Pod::Usage;
 
 our $VERSION = '0.01';
 
-my ($logfile, $opt_timestamp, $opt_help, $opt_version);
+my ($logfile, $opt_timestamp, $opt_print_always, $opt_help, $opt_version);
 GetOptions(
     'logfile=s' => \$logfile,
     'timestamp' => \$opt_timestamp,
+    'print-always' => \$opt_print_always,
     'help'      => \$opt_help,
     'version'   => \$opt_version,
 ) or pod2usage(1);
@@ -87,7 +88,7 @@ if ($exit_code == -1) {
 }
 
 # print log to stdout
-if ($exit_code != 0) {
+if ($exit_code != 0 || $opt_print_always) {
     open my $fh, '<', $logfile
         or die "failed to open $logfile:$!";
     seek $fh, $logpos, SEEK_SET
@@ -116,7 +117,7 @@ cronlog - log output of a cron job, and send mail on error
 
 =head1 SYNOPSIS
 
-    cronlog [--logfile=logfile] [--timestamp] -- cmd args...
+    cronlog [--logfile=logfile] [--timestamp] [--print-always] -- cmd args...
 
 =head1 DESCRIPTION
 
