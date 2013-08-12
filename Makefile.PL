@@ -19,6 +19,7 @@ install_script 'semaphore';
 install_script 'ssh_run';
 install_script 'touch_if';
 install_script 'vip';
+install_script 'fifomail';
 
 auto_include;
 auto_install;

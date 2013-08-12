@@ -1,0 +1,66 @@
+#! /usr/bin/perl
+
+use strict;
+use warnings;
+
+use Getopt::Long;
+use POSIX qw(mkfifo);
+use Pod::Usage;
+
+# read parameters
+my ($from, $subject, $fifo_fn, $opt_help);
+GetOptions(
+    'from=s' => \$from,
+    'subject=s' => \$subject,
+    'fifo=s' => \$fifo_fn,
+    'help' => \$opt_help,
+) or pod2usage(1);
+pod2usage(0)
+    if $opt_help;
+die "set fifo file by using --fifo\n"
+    unless $fifo_fn;
+die "no addresses\n"
+    unless @ARGV;
+my @to = @ARGV;
+
+# create fifo
+if (! -e $fifo_fn) {
+    mkfifo($fifo_fn, 0622)
+        or die "failed to create fifo:$fifo_fn:$!";
+}
+
+while (1) {
+    # open fifo and read all
+    open my $fifo_fh, '<', $fifo_fn
+        or die "failed to open fifo:$fifo_fn:$!";
+    my $content = do { local $/; <$fifo_fh> };
+    close $fifo_fh;
+    # send content
+    open my $sendmail_fh, '|-', 'sendmail', @to
+        or die "failed to spawn sendmail:$!";
+    print $sendmail_fh "To: ", join(", ", @to), "\n";
+    print $sendmail_fh "From: $from\n"
+        if $from;
+    print $sendmail_fh "Subject: $subject\n"
+        if $subject;
+    print $sendmail_fh "\n";
+    print $sendmail_fh $content;
+    close $sendmail_fh
+        or die "failed to close output to sendmail:$!";
+    die "sendmail exitted with exit code:$?"
+        if $? != 0;
+}
+
+__END__
+
+=head1 NAME
+
+fifomail - send writes to fifo as mail
+
+=head1 SYNOPSIS
+
+    fifomail --fifo=fifo.path [--from=addr] [--subject=subj] addresses...
+
+=head1 AUTHOR
+
+=cut
