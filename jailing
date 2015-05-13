@@ -44,6 +44,9 @@ for my $dir (qw(tmp var/tmp run/lock)) {
         or die "failed to chmod $root/$dir:$!";
 }
 
+# create other directories
+mkdir_p("var/log");
+
 # create symlinks
 symlink "../run/lock", "$root/var/lock";
 
