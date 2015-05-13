@@ -31,8 +31,10 @@ if (! -e $root) {
 # rebind the directories
 for my $dir (@BINDDIRS) {
     mkdir_p($dir);
-    run_cmd("mount", "--bind", "/$dir", "$root/$dir");
-    run_cmd("mount", "-o", "remount,ro", "$root/$dir");
+    if (is_empty("$root/$dir")) {
+        run_cmd("mount", "--bind", "/$dir", "$root/$dir");
+        run_cmd("mount", "-o", "remount,ro", "$root/$dir");
+    }
 }
 
 # create temporary directories
@@ -78,6 +80,17 @@ sub run_cmd {
     my @argv = @_;
     system(@argv) == 0
         or die "failed to exec $argv[0]:$!";
+}
+
+sub is_empty {
+    my $path = shift;
+    opendir my $fh, $path
+        or die "failed to opendir:$path:$!";
+    while (my $fn = readdir $fh) {
+        return 0
+            unless $fn eq '.' || $fn eq '..';
+    }
+    return 1;
 }
 
 __END__
