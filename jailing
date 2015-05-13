@@ -7,7 +7,7 @@ use Getopt::Long;
 use Pod::Usage qw(pod2usage);
 
 our @NEWDIRS = qw(etc run usr var var/log);
-our @BINDDIRS = qw(bin lib lib64 sbin usr/bin usr/lib usr/sbin usr/share);
+our @BINDDIRS = grep { -d "/$_" } qw(bin lib lib64 sbin usr/bin usr/include usr/lib usr/sbin usr/share usr/src);
 our @TEMPDIRS = qw(tmp run/lock var/tmp);
 
 my $root;
