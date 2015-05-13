@@ -6,7 +6,7 @@ use Errno ();
 use Getopt::Long;
 use Pod::Usage qw(pod2usage);
 
-our @BINDDIRS = qw(bin lib lib64 sbin usr/bin usr/lib usr/sbin);
+our @BINDDIRS = qw(bin lib lib64 sbin usr/bin usr/lib usr/sbin usr/share);
 
 my $root;
 
