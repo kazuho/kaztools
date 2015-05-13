@@ -38,12 +38,14 @@ for my $dir (@BINDDIRS) {
 }
 
 # create temporary directories
-mkdir_p("tmp");
-chmod 01777, "$root/tmp"
-    or die "failed to chmod $root/tmp:$!";
-mkdir_p("var/tmp");
-chmod 01777, "$root/var/tmp"
-    or die "failed to chmod $root/var/tmp:$!";
+for my $dir (qw(tmp var/tmp run/lock)) {
+    mkdir_p($dir);
+    chmod 01777, "$root/$dir"
+        or die "failed to chmod $root/$dir:$!";
+}
+
+# create symlinks
+symlink "../run/lock", "$root/var/lock";
 
 # create devices
 mkdir "$root/dev";
