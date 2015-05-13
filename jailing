@@ -6,7 +6,9 @@ use Errno ();
 use Getopt::Long;
 use Pod::Usage qw(pod2usage);
 
+our @NEWDIRS = qw(etc run usr var var/log);
 our @BINDDIRS = qw(bin lib lib64 sbin usr/bin usr/lib usr/sbin usr/share);
+our @TEMPDIRS = qw(tmp run/lock var/tmp);
 
 my $root;
 
@@ -28,24 +30,25 @@ if (! -e $root) {
         or die "failed to create directory:$root:$!";
 }
 
-# rebind the directories
+# create directories
+for my $dir (@NEWDIRS, @BINDDIRS, @TEMPDIRS) {
+    mkdir "$root/$dir"
+       or $! == Errno::EEXIST
+       or die "failed to create directory:$!";
+}
+
+# chmod the temporary directories
+for my $dir (@TEMPDIRS) {
+    chmod 01777, "$root/$dir"
+        or die "failed to chmod $root/$dir:$!";
+}
+
 for my $dir (@BINDDIRS) {
-    mkdir_p($dir);
     if (is_empty("$root/$dir")) {
         run_cmd("mount", "--bind", "/$dir", "$root/$dir");
         run_cmd("mount", "-o", "remount,ro", "$root/$dir");
     }
 }
-
-# create temporary directories
-for my $dir (qw(tmp var/tmp run/lock)) {
-    mkdir_p($dir);
-    chmod 01777, "$root/$dir"
-        or die "failed to chmod $root/$dir:$!";
-}
-
-# create other directories
-mkdir_p("var/log");
 
 # create symlinks
 symlink "../run/lock", "$root/var/lock";
@@ -70,16 +73,6 @@ chdir "/"
     or die "failed to chroot to /:$!";
 exec @ARGV;
 die "failed to exec:$ARGV[0]:$!";
-
-sub mkdir_p {
-    my $dir = shift;
-    return if -e "$root/$dir";
-    if ($dir =~ m{\/[^/]+$}s) {
-        mkdir_p($`);
-    }
-    mkdir "$root/$dir"
-       or die "failed to create directory:$root/$dir:$!";
-}
 
 sub run_cmd {
     my @argv = @_;
