@@ -77,7 +77,7 @@ sub mkdir_p {
 sub run_cmd {
     my @argv = @_;
     system(@argv) == 0
-        or die "failed to exec $ARGV[0]:$!";
+        or die "failed to exec $argv[0]:$!";
 }
 
 __END__
