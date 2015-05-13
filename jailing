@@ -10,10 +10,11 @@ our @NEWDIRS = qw(etc run usr var var/log);
 our @BINDDIRS = grep { -d "/$_" } qw(bin lib lib64 sbin usr/bin usr/include usr/lib usr/sbin usr/share usr/src);
 our @TEMPDIRS = qw(tmp run/lock var/tmp);
 
-my $root;
+my ($root, $opt_umount);
 
 GetOptions(
     'root=s' => \$root,
+    umount   => \$opt_umount,
     help     => sub {
         pod2usage(0);
     },
@@ -23,6 +24,19 @@ GetOptions(
 die "--root not specified\n"
     unless $root;
 $root =~ s{/$}{}gs;
+
+if ($opt_umount) {
+    die "root does not exist, cowardly refusing to umount\n"
+        unless -d $root;
+    open my $fh, "-|", "LANG=C mount"
+        or die "failed to exec mount:$!";
+    while (my $line = <$fh>) {
+        if ($line =~ m{ on $root/([^ ]+)}) {
+            run_cmd("umount", "$root/$1");
+        }
+    }
+    exit 0;
+}
 
 # create the directory if not exists
 if (! -e $root) {
@@ -101,6 +115,9 @@ jailing - a minimalistic chroot jail builder/runner for Linux
 
   # create and/or enter the jail, and optionally run the command
   jailing --root=/path/to/chroot/jail [cmd ...]
+
+  # unmount the bind mounts of the jail
+  jailing --root=/path/to/chroot/jail --umount
 
 =head1 DESCRIPTION
 
