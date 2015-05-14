@@ -15,7 +15,6 @@ install_script 'bt_cores';
 install_script 'cronlog';
 install_script 'diffloy';
 install_script 'guncat';
-install_script 'jailing';
 install_script 'semaphore';
 install_script 'ssh_run';
 install_script 'touch_if';
